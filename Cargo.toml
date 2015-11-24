@@ -1,4 +1,4 @@
 [package]
-name = "ring_buf"
+name = "rbuf"
 version = "0.1.0"
 authors = ["Murali Mohan Rath <mmrath@gmail.com>"]

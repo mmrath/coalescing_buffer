@@ -8,7 +8,7 @@ mod collections{
         lastCleaned: usize,
         rejectionCount: AtomicUsize,
         keys: Vec<Option<K>>,
-        values: Vec<AtomicPtr<Option<&V>>>,
+        values: Vec<AtomicPtr<Option<V>>>,
         mask: usize,
         capacity: usize,
         firstWrite: AtomicUsize,
@@ -44,8 +44,7 @@ mod collections{
             }
         }
 
-
-        pub fn size(&mut self) -> usize {
+        pub fn size(&self) -> usize {
             // loop until you get a consistent read of both volatile indices
             while true {
                 let lastReadBefore = self.lastRead.load(Ordering::SeqCst);
@@ -86,24 +85,38 @@ mod collections{
 
         pub fn offer(&mut self, key: K, value: V) -> bool {
             let nextWrite = self.nextWrite.load(Ordering::SeqCst);
+            let mut foundIndex: Option<usize> = None;
+            let mut readReached: bool = false;
 
             for updatePosition in self.firstWrite.load(Ordering::SeqCst)..nextWrite {
                 let index = self.mask(updatePosition);
                 if Some(key) == self.keys[index] {
-                    // Use equals here
-                    self.values[index].store(&mut Some(value), Ordering::SeqCst);
+                    foundIndex = Some(index);
                     if updatePosition >= self.firstWrite.load(Ordering::SeqCst) {
                         // check that the reader has not read beyond our update point yet
-                        return true;
+                        readReached = true;
                     } else {
                         break;
                     }
                 }
             }
-            return self.add(key, &value);
+
+            if readReached {
+                match foundIndex {
+                    Some(x) => {
+                        self.values[x].store(&mut Some(value), Ordering::SeqCst);
+                        return true;
+                    }
+                    None => {
+                        panic!("Invalid index.");
+                    }
+                }
+            } else {
+                return self.add(key, value);
+            }
         }
 
-        pub fn add(&mut self, key: K, value: &V) -> bool {
+        pub fn add(&mut self, key: K, value: V) -> bool {
             if self.is_full() {
                 self.rejectionCount.fetch_add(1, Ordering::Relaxed);
                 return false;
@@ -129,7 +142,7 @@ mod collections{
             }
         }
 
-        pub fn store(&mut self, key: K, value: &V) {
+        pub fn store(&mut self, key: K, value: V) {
             let nextWrite = self.nextWrite.load(Ordering::Relaxed);
             let index = self.mask(nextWrite);
             self.keys[index] = Some(key);
@@ -138,7 +151,11 @@ mod collections{
         }
 
         pub fn poll_all(&mut self, bucket: &mut Vec<Option<V>>) -> usize {
-            return self.fill(bucket, self.nextWrite.load(Ordering::SeqCst));
+            let mut total_to_poll: usize = 0;
+            {
+                total_to_poll = self.nextWrite.load(Ordering::SeqCst)
+            }
+            return self.fill(bucket, total_to_poll);
         }
 
         pub fn poll(&mut self, bucket: &mut Vec<Option<V>>, maxItems: usize) -> usize {
@@ -154,11 +171,9 @@ mod collections{
             for readIndex in lastRead + 1..claimUpTo {
                 let index = self.mask(readIndex);
                 unsafe {
-                    let val = self.values[index].load(Ordering::SeqCst).as_ref();
-                    match val {
-                        Some(&x) => bucket.push(x),
-                        None => bucket.push(None),
-                    }
+                    let mut val = self.values[index].swap(&mut None, Ordering::SeqCst).as_ref();
+
+                    bucket.push(val.take().unwrap().take());
                 }
             }
 
