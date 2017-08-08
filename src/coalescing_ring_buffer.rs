@@ -38,7 +38,7 @@ where
         let mut keys: Vec<Option<K>> = Vec::with_capacity(size);
         let mut values: Vec<AtomicPtr<Option<V>>> = Vec::with_capacity(size);
 
-        for i in 0..size {
+        for _ in 0..size {
             keys.push(None);
             values.push(AtomicPtr::new(&mut None));
         }
@@ -192,9 +192,10 @@ where
             }
         }
 
-        self.last_read.fetch_sub(1, Ordering::SeqCst);
+        self.last_read.store(claim_up_to-1, Ordering::SeqCst);
         return bucket;
     }
+
 
     fn mask(&mut self, value: usize) -> usize {
         return value & self.mask;

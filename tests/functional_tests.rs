@@ -48,27 +48,35 @@ mod tests {
         let VOD_SNAPSHOT_1 = MarketSnapshot::new(1, 3, 4);
         let VOD_SNAPSHOT_2 = MarketSnapshot::new(1, 5, 6);
         let BP_SNAPSHOT = MarketSnapshot::new(2, 7, 8);
-        
+
+        println!("Test 1");
         let mut buffer = create_buffer(2);
         assert_eq!(0, buffer.size());
         assert!(buffer.is_empty());
         assert!(!buffer.is_full());
 
-        buffer.offer(BP_SNAPSHOT.instrument_id,BP_SNAPSHOT);
+        println!("Test 2");
+        buffer.offer(BP_SNAPSHOT.instrument_id, BP_SNAPSHOT);
         assert_eq!(1, buffer.size());
         assert!(!buffer.is_empty());
         assert!(!buffer.is_full());
 
+        println!("Test 3");
         buffer.offer(VOD_SNAPSHOT_1.instrument_id, VOD_SNAPSHOT_1);
         assert_eq!(2, buffer.size());
         assert!(!buffer.is_empty());
         assert!(buffer.is_full());
 
+        println!("Test 4");
         let buf = buffer.poll(1);
+        println!("Test 4");
         assert_eq!(1, buffer.size());
+        println!("Test 4");
         assert!(!buffer.is_empty());
+        println!("Test 4");
         assert!(!buffer.is_full());
 
+        println!("Test 5");
         let buf = buffer.poll(1);
         assert_eq!(0, buffer.size());
         assert!(buffer.is_empty());
