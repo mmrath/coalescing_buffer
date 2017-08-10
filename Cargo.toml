@@ -1,8 +1,8 @@
 [package]
-name = "coalescing_ring_buf"
+name = "rbuf"
 version = "0.1.0"
 authors = ["Murali Mohan Rath <mmrath@gmail.com>"]
 
 [lib]
-name = "coalescing_ring_buf"
+name = "rbuf"
 path = "src/lib.rs"
