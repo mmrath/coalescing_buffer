@@ -6,12 +6,19 @@ pub struct CoalescingRingBuffer<K, V> {
     next_write: AtomicUsize,
     last_cleaned: usize,
     rejection_count: AtomicUsize,
-    keys: Vec<Option<K>>,
+    keys: Vec<KeyType<K>>,
     values: Vec<AtomicPtr<V>>,
     mask: usize,
     capacity: usize,
     first_write: AtomicUsize,
     last_read: AtomicUsize,
+}
+
+#[derive(PartialEq, Debug)]
+enum KeyType<T> {
+    Empty,
+    NonEmpty(T),
+    NonCollapsible,
 }
 
 fn next_power_of_two(capacity: usize) -> usize {
@@ -29,17 +36,17 @@ fn next_power_of_two(capacity: usize) -> usize {
 
 impl<K, V> CoalescingRingBuffer<K, V>
     where
-        K: Eq + Copy + Debug,
+        K: Eq + Debug,
         V: Debug,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
 
-        let mut keys: Vec<Option<K>> = Vec::with_capacity(size);
+        let mut keys: Vec<KeyType<K>> = Vec::with_capacity(size);
         let mut values: Vec<AtomicPtr<V>> = Vec::with_capacity(size);
 
         for _ in 0..size {
-            keys.push(None);
+            keys.push(KeyType::Empty);
             values.push(AtomicPtr::new(ptr::null_mut()));
         }
 
@@ -97,9 +104,10 @@ impl<K, V> CoalescingRingBuffer<K, V>
     pub fn offer(&mut self, key: K, value: V) -> bool {
         let next_write = self.next_write.load(Ordering::SeqCst);
         let val_ptr = Box::into_raw(Box::new(value));
+        let key_type = KeyType::NonEmpty(key);
         for update_pos in self.first_write.load(Ordering::SeqCst)..next_write {
             let index = self.mask(update_pos);
-            if Some(key) == self.keys[index] {
+            if key_type == self.keys[index] {
                 let old_ptr = self.values[index].swap(val_ptr, Ordering::SeqCst);
                 drop_value(old_ptr);
                 if update_pos >= self.first_write.load(Ordering::SeqCst) {
@@ -110,10 +118,14 @@ impl<K, V> CoalescingRingBuffer<K, V>
                 }
             }
         }
-        return self.add(key, val_ptr);
+        return self.add(key_type, val_ptr);
     }
 
-    fn add(&mut self, key: K, value: *mut V) -> bool {
+    pub fn offer_value_only(&mut self, value: V) -> bool {
+        return self.add(KeyType::NonCollapsible, Box::into_raw(Box::new(value)));
+    }
+
+    fn add(&mut self, key: KeyType<K>, value: *mut V) -> bool {
         if self.is_full() {
             self.rejection_count.fetch_add(1, Ordering::Relaxed);
             return false;
@@ -134,16 +146,16 @@ impl<K, V> CoalescingRingBuffer<K, V>
             self.last_cleaned = last_read + 1;
             let x = self.last_cleaned;
             let index = self.mask(x);
-            self.keys[index] = None;
+            self.keys[index] = KeyType::Empty;
             let old_val = self.values[index].swap(ptr::null_mut(), Ordering::Relaxed);
             drop_value(old_val);
         }
     }
 
-    fn store(&mut self, key: K, value: *mut V) {
+    fn store(&mut self, key: KeyType<K>, value: *mut V) {
         let next_write = self.next_write.load(Ordering::Relaxed);
         let index = self.mask(next_write);
-        self.keys[index] = Some(key);
+        self.keys[index] = key;
         let old_ptr = self.values[index].swap(value, Ordering::SeqCst);
         drop_value(old_ptr);
         self.next_write.store(next_write + 1, Ordering::Relaxed);
@@ -176,7 +188,6 @@ impl<K, V> CoalescingRingBuffer<K, V>
                 bucket.push(unsafe { *(Box::from_raw(val)) });
             }
         }
-
         self.last_read.store(claim_up_to - 1, Ordering::SeqCst);
         return bucket;
     }

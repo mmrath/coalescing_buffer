@@ -65,7 +65,7 @@ mod tests {
         assert!(buffer.is_empty());
         assert!(!buffer.is_full());
 
-        buffer.offer(BP_SNAPSHOT.instrument_id, BP_SNAPSHOT.clone());
+        buffer.offer_value_only(BP_SNAPSHOT.clone());
         assert_eq!(1, buffer.size());
         assert!(!buffer.is_empty());
         assert!(!buffer.is_full());
@@ -135,7 +135,14 @@ mod tests {
         assert_contains(&mut buffer, vec![VOD_SNAPSHOT_2.clone()]);
     }
 
-    
+    #[test]
+    fn should_not_update_values_without_keys() {
+        let mut buffer = create_buffer(2);
+        add_value(&mut buffer, VOD_SNAPSHOT_1.clone());
+        add_value(&mut buffer, VOD_SNAPSHOT_2.clone());
+        assert_contains(&mut buffer, vec![VOD_SNAPSHOT_1.clone(), VOD_SNAPSHOT_2.clone()]);
+    }
+
     #[test]
     fn should_update_values_with_equal_keys_and_preserve_ordering() {
         let mut buffer = create_buffer(2);
@@ -157,78 +164,79 @@ mod tests {
         assert_contains(&mut buffer, vec![VOD_SNAPSHOT_2.clone()]);
     }
 
-    /*
+
     #[test]
     fn should_return_only_the_maximum_number_of_requested_items() {
-        addValue(BP_SNAPSHOT);
-        addValue(VOD_SNAPSHOT_1);
-        addValue(VOD_SNAPSHOT_2);
+        let mut buffer = create_buffer(10);
+        add_value(&mut buffer, BP_SNAPSHOT.clone());
+        add_value(&mut buffer, VOD_SNAPSHOT_1.clone());
+        add_value(&mut buffer, VOD_SNAPSHOT_2.clone());
 
-        List < MarketSnapshot > snapshots = new ArrayList < MarketSnapshot > ();
-        assertEquals(2, buffer.poll(snapshots, 2));
-        assertEquals(2, snapshots.size());
-        assertSame(BP_SNAPSHOT, snapshots.get(0));
-        assertSame(VOD_SNAPSHOT_1, snapshots.get(1));
+        let snapshots = buffer.poll(2);
+        assert_eq!(2, snapshots.len());
+        assert_eq!(&BP_SNAPSHOT, snapshots.get(0).unwrap());
+        assert_eq!(&VOD_SNAPSHOT_1, snapshots.get(1).unwrap());
 
-        snapshots.clear();
-        assertEquals(1, buffer.poll(snapshots, 1));
-        assertEquals(1, snapshots.size());
-        assertSame(VOD_SNAPSHOT_2, snapshots.get(0));
+        let snapshots = buffer.poll(1);
+        assert_eq!(1, snapshots.len());
+        assert_eq!(&VOD_SNAPSHOT_2, snapshots.get(0).unwrap());
 
-        assertIsEmpty();
+        assert_is_empty(&mut buffer);
+    }
+
+
+    #[test]
+    fn should_return_all_items_without_request_limit() {
+        let mut buffer = create_buffer(10);
+        add_value(&mut buffer, BP_SNAPSHOT.clone());
+        add_key_value(&mut buffer, VOD_SNAPSHOT_1.clone());
+        add_key_value(&mut buffer, VOD_SNAPSHOT_2.clone());
+
+        let snapshots = buffer.poll_all();
+        assert_eq!(2, snapshots.len());
+
+        assert_eq!(&BP_SNAPSHOT, snapshots.get(0).unwrap());
+        assert_eq!(&VOD_SNAPSHOT_2, snapshots.get(1).unwrap());
+
+        assert_is_empty(&mut buffer);
+    }
+
+
+    #[test]
+    fn should_count_rejections() {
+        let mut buffer = create_buffer(2);
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer_value_only(BP_SNAPSHOT.clone());
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer(1, VOD_SNAPSHOT_1.clone());
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer(1, VOD_SNAPSHOT_2.clone());
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer_value_only(BP_SNAPSHOT.clone());
+        assert_eq!(1, buffer.rejection_count());
+
+        buffer.offer(2, BP_SNAPSHOT.clone());
+        assert_eq!(2, buffer.rejection_count());
     }
 
     #[test]
-    fn shouldReturnAllItemsWithoutRequestLimit() {
-        addValue(BP_SNAPSHOT);
-        add_key_value(VOD_SNAPSHOT_1);
-        add_key_value(VOD_SNAPSHOT_2);
+    fn should_use_object_equality_to_compare_keys() {
+        let mut buffer: CoalescingRingBuffer<String, MarketSnapshot> = CoalescingRingBuffer::new(2);
 
-        List < MarketSnapshot > snapshots = new ArrayList < MarketSnapshot > ();
-        assertEquals(2, buffer.poll(snapshots));
-        assertEquals(2, snapshots.size());
+        buffer.offer(String::from("boo"), BP_SNAPSHOT.clone());
+        buffer.offer(String::from("boo"), BP_SNAPSHOT.clone());
 
-        assertSame(BP_SNAPSHOT, snapshots.get(0));
-        assertSame(VOD_SNAPSHOT_2, snapshots.get(1));
-
-        assertIsEmpty();
+        assert_eq!(1, buffer.size());
     }
 
-    #[test]
-    fn shouldCountRejections() {
-        CoalescingRingBuffer < Integer, Object > buffer = new CoalescingRingBuffer < Integer, Object > (2);
-        assertEquals(0, buffer.rejectionCount());
-
-        buffer.offer(new Object());
-        assertEquals(0, buffer.rejectionCount());
-
-        buffer.offer(1, new Object());
-        assertEquals(0, buffer.rejectionCount());
-
-        buffer.offer(1, new Object());
-        assertEquals(0, buffer.rejectionCount());
-
-        buffer.offer(new Object());
-        assertEquals(1, buffer.rejectionCount());
-
-        buffer.offer(2, new Object());
-        assertEquals(2, buffer.rejectionCount());
+    fn assert_is_empty(buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>) {
+        assert_contains(buffer, vec![]);
     }
 
-    #[test]
-    fn shouldUseObjectEqualityToCompareKeys() {
-        CoalescingRingBuffer < String, Object > buffer = new CoalescingRingBuffer < String, Object > (2);
-
-        buffer.offer(new String("boo"), new Object());
-        buffer.offer(new String("boo"), new Object());
-
-        assertEquals(1, buffer.size());
-    }
-
-    fn assertIsEmpty() {
-        assert_contains();
-    }
-    */
 
     fn add_key_value(buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>, snapshot: MarketSnapshot) {
         assert!(buffer.offer(snapshot.instrument_id, snapshot));
@@ -243,5 +251,9 @@ mod tests {
             actual.iter().zip(expected).all(|(a, b)| a == &b);
         println!("Contains 2");
         return ret;
+    }
+
+    fn add_value(buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>, snapshot: MarketSnapshot) {
+        assert!(buffer.offer_value_only(snapshot));
     }
 }
