@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::cmp;
+use std::{cmp, ptr};
 use std::fmt::Debug;
 
 pub struct CoalescingRingBuffer<K, V> {
@@ -7,7 +7,7 @@ pub struct CoalescingRingBuffer<K, V> {
     last_cleaned: usize,
     rejection_count: AtomicUsize,
     keys: Vec<Option<K>>,
-    values: Vec<AtomicPtr<Option<V>>>,
+    values: Vec<AtomicPtr<V>>,
     mask: usize,
     capacity: usize,
     first_write: AtomicUsize,
@@ -28,19 +28,19 @@ fn next_power_of_two(capacity: usize) -> usize {
 
 
 impl<K, V> CoalescingRingBuffer<K, V>
-where
-    K: Eq + Copy + Debug,
-    V: Debug,
+    where
+        K: Eq + Copy + Debug,
+        V: Debug,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
 
         let mut keys: Vec<Option<K>> = Vec::with_capacity(size);
-        let mut values: Vec<AtomicPtr<Option<V>>> = Vec::with_capacity(size);
+        let mut values: Vec<AtomicPtr<V>> = Vec::with_capacity(size);
 
         for _ in 0..size {
             keys.push(None);
-            values.push(AtomicPtr::new(&mut None));
+            values.push(AtomicPtr::new(ptr::null_mut()));
         }
 
         CoalescingRingBuffer {
@@ -95,44 +95,25 @@ where
     }
 
     pub fn offer(&mut self, key: K, value: V) -> bool {
-        println!("{:?}", key);
-
         let next_write = self.next_write.load(Ordering::SeqCst);
-        let mut found_index: Option<usize> = None;
-        let mut read_reached: bool = false;
-
+        let val_ptr = Box::into_raw(Box::new(value));
         for update_pos in self.first_write.load(Ordering::SeqCst)..next_write {
             let index = self.mask(update_pos);
             if Some(key) == self.keys[index] {
-                found_index = Some(index);
+                let old_ptr = self.values[index].swap(val_ptr, Ordering::SeqCst);
+                drop_value(old_ptr);
                 if update_pos >= self.first_write.load(Ordering::SeqCst) {
                     // check that the reader has not read beyond our update point yet
-                    read_reached = true;
-                    break;
+                    return true;
                 } else {
                     break;
                 }
             }
         }
-
-        println!("Read reached {:?},{:?}", read_reached, found_index);
-
-        if read_reached {
-            match found_index {
-                Some(x) => {
-                    self.values[x].store(&mut Some(value), Ordering::SeqCst);
-                    return true;
-                }
-                None => {
-                    panic!("Invalid index.");
-                }
-            }
-        } else {
-            return self.add(key, value);
-        }
+        return self.add(key, val_ptr);
     }
 
-    pub fn add(&mut self, key: K, value: V) -> bool {
+    fn add(&mut self, key: K, value: *mut V) -> bool {
         if self.is_full() {
             self.rejection_count.fetch_add(1, Ordering::Relaxed);
             return false;
@@ -154,15 +135,17 @@ where
             let x = self.last_cleaned;
             let index = self.mask(x);
             self.keys[index] = None;
-            self.values[index].store(&mut None, Ordering::Relaxed);
+            let old_val = self.values[index].swap(ptr::null_mut(), Ordering::Relaxed);
+            drop_value(old_val);
         }
     }
 
-    pub fn store(&mut self, key: K, value: V) {
+    fn store(&mut self, key: K, value: *mut V) {
         let next_write = self.next_write.load(Ordering::Relaxed);
         let index = self.mask(next_write);
         self.keys[index] = Some(key);
-        self.values[index].store(&mut Some(value), Ordering::SeqCst);
+        let old_ptr = self.values[index].swap(value, Ordering::SeqCst);
+        drop_value(old_ptr);
         self.next_write.store(next_write + 1, Ordering::Relaxed);
     }
 
@@ -186,18 +169,25 @@ where
         let mut bucket: Vec<V> = Vec::new();
         for read_index in last_read + 1..claim_up_to {
             let index = self.mask(read_index);
-            unsafe {
-                let val = self.values[index].swap(&mut None, Ordering::SeqCst);
-                bucket.push((*val).take().unwrap());
+            let val = self.values[index].swap(ptr::null_mut(), Ordering::SeqCst);
+            if val.is_null() {
+                panic!("Null pointer is not expected here!")
+            } else {
+                bucket.push(unsafe { *(Box::from_raw(val)) });
             }
         }
 
-        self.last_read.store(claim_up_to-1, Ordering::SeqCst);
+        self.last_read.store(claim_up_to - 1, Ordering::SeqCst);
         return bucket;
     }
 
-
     fn mask(&mut self, value: usize) -> usize {
         return value & self.mask;
+    }
+}
+
+fn drop_value<V>(val_ptr: *mut V) {
+    if !val_ptr.is_null() {
+        let _ = unsafe { Box::from_raw(val_ptr) };
     }
 }

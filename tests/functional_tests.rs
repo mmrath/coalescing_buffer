@@ -135,30 +135,31 @@ mod tests {
         assert_contains(&mut buffer, vec![VOD_SNAPSHOT_2.clone()]);
     }
 
+    
+    #[test]
+    fn should_update_values_with_equal_keys_and_preserve_ordering() {
+        let mut buffer = create_buffer(2);
+        add_key_value(&mut buffer, VOD_SNAPSHOT_1.clone());
+        add_key_value(&mut buffer, BP_SNAPSHOT.clone());
+        add_key_value(&mut buffer, VOD_SNAPSHOT_2.clone());
+
+        assert_contains(&mut buffer, vec![VOD_SNAPSHOT_2.clone(), BP_SNAPSHOT.clone()]);
+    }
+
+    #[test]
+    fn should_not_update_values_if_read_occurs_between_values() {
+        let mut buffer = create_buffer(2);
+
+        add_key_value(&mut buffer, VOD_SNAPSHOT_1.clone());
+        assert_contains(&mut buffer, vec![VOD_SNAPSHOT_1.clone()]);
+
+        add_key_value(&mut buffer, VOD_SNAPSHOT_2.clone());
+        assert_contains(&mut buffer, vec![VOD_SNAPSHOT_2.clone()]);
+    }
+
     /*
     #[test]
-    fn shouldUpdateValuesWithEqualKeysAndPreserveOrdering() {
-        let mut buffer = create_buffer(2);
-        addKeyAndValue(&mut buffer, VOD_SNAPSHOT_1.clone());
-        addKeyAndValue(&mut buffer, BP_SNAPSHOT.clone());
-        addKeyAndValue(&mut buffer, VOD_SNAPSHOT_2.clone());
-
-        assertContains(&mut buffer, vec![VOD_SNAPSHOT_2.clone(), BP_SNAPSHOT.clone()]);
-    }
-
-    #[test]
-    fn shouldNotUpdateValuesIfReadOccursBetweenValues() {
-        let mut buffer = create_buffer(2);
-
-        addKeyAndValue(&mut buffer, VOD_SNAPSHOT_1.clone());
-        assertContains(&mut buffer, vec![VOD_SNAPSHOT_1.clone()]);
-
-        addKeyAndValue(&mut buffer, VOD_SNAPSHOT_2.clone());
-        assertContains(&mut buffer, vec![VOD_SNAPSHOT_2.clone()]);
-    }
-
-    #[test]
-    fn shouldReturnOnlyTheMaximumNumberOfRequestedItems() {
+    fn should_return_only_the_maximum_number_of_requested_items() {
         addValue(BP_SNAPSHOT);
         addValue(VOD_SNAPSHOT_1);
         addValue(VOD_SNAPSHOT_2);
@@ -180,8 +181,8 @@ mod tests {
     #[test]
     fn shouldReturnAllItemsWithoutRequestLimit() {
         addValue(BP_SNAPSHOT);
-        addKeyAndValue(VOD_SNAPSHOT_1);
-        addKeyAndValue(VOD_SNAPSHOT_2);
+        add_key_value(VOD_SNAPSHOT_1);
+        add_key_value(VOD_SNAPSHOT_2);
 
         List < MarketSnapshot > snapshots = new ArrayList < MarketSnapshot > ();
         assertEquals(2, buffer.poll(snapshots));
@@ -225,7 +226,7 @@ mod tests {
     }
 
     fn assertIsEmpty() {
-        assertContains();
+        assert_contains();
     }
     */
 
