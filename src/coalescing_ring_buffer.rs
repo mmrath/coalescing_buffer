@@ -28,7 +28,6 @@ impl<T> KeyCell<T> {
         }
     }
     pub fn set(&self, val: T) {
-
         //let val_ptr = Box::into_raw(Box::new(val));
         //let old_ptr = self.value.swap(val_ptr, Ordering::SeqCst);
         //drop_value(old_ptr);
@@ -67,9 +66,9 @@ fn next_power_of_two(capacity: usize) -> usize {
 
 
 impl<K, V> CoalescingRingBuffer<K, V>
-where
-    K: Eq + Debug + Send,
-    V: Debug,
+    where
+        K: Eq + Debug + Send,
+        V: Debug,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
@@ -146,7 +145,7 @@ where
                     drop_value(old_ptr);
                     return true;
                 } else {
-                    self.values[index].swap(old_ptr, Ordering::SeqCst);
+                    self.values[index].compare_and_swap(val_ptr, old_ptr, Ordering::SeqCst);
                     //::std::thread::sleep(::std::time::Duration::from_millis(2000));
                     break;
                 }
@@ -239,8 +238,8 @@ unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> {}
 unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> {}
 
 fn drop_value<V>(val_ptr: *mut V)
-where
-    V: Debug,
+    where
+        V: Debug,
 {
     if !val_ptr.is_null() {
         let val = unsafe { Box::from_raw(val_ptr) };
