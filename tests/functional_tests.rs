@@ -123,7 +123,10 @@ mod tests {
         add_key_value(&mut buffer, BP_SNAPSHOT.clone());
         add_key_value(&mut buffer, VOD_SNAPSHOT_1.clone());
 
-        assert_contains(&mut buffer, vec![BP_SNAPSHOT.clone(), VOD_SNAPSHOT_1.clone()]);
+        assert_contains(
+            &mut buffer,
+            vec![BP_SNAPSHOT.clone(), VOD_SNAPSHOT_1.clone()],
+        );
     }
 
 
@@ -140,7 +143,10 @@ mod tests {
         let mut buffer = create_buffer(2);
         add_value(&mut buffer, VOD_SNAPSHOT_1.clone());
         add_value(&mut buffer, VOD_SNAPSHOT_2.clone());
-        assert_contains(&mut buffer, vec![VOD_SNAPSHOT_1.clone(), VOD_SNAPSHOT_2.clone()]);
+        assert_contains(
+            &mut buffer,
+            vec![VOD_SNAPSHOT_1.clone(), VOD_SNAPSHOT_2.clone()],
+        );
     }
 
     #[test]
@@ -150,7 +156,10 @@ mod tests {
         add_key_value(&mut buffer, BP_SNAPSHOT.clone());
         add_key_value(&mut buffer, VOD_SNAPSHOT_2.clone());
 
-        assert_contains(&mut buffer, vec![VOD_SNAPSHOT_2.clone(), BP_SNAPSHOT.clone()]);
+        assert_contains(
+            &mut buffer,
+            vec![VOD_SNAPSHOT_2.clone(), BP_SNAPSHOT.clone()],
+        );
     }
 
     #[test]
@@ -238,13 +247,18 @@ mod tests {
     }
 
 
-    fn add_key_value(buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>, snapshot: MarketSnapshot) {
+    fn add_key_value(
+        buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>,
+        snapshot: MarketSnapshot,
+    ) {
         assert!(buffer.offer(snapshot.instrument_id, snapshot));
     }
 
 
-    fn assert_contains(buffer: &mut CoalescingRingBuffer<usize,
-        MarketSnapshot>, expected: Vec<MarketSnapshot>) -> bool {
+    fn assert_contains(
+        buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>,
+        expected: Vec<MarketSnapshot>,
+    ) -> bool {
         let actual = buffer.poll_all();
         println!("Contains 1");
         let ret = (actual.len() == expected.len()) && // zip stops at the shortest
@@ -253,7 +267,10 @@ mod tests {
         return ret;
     }
 
-    fn add_value(buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>, snapshot: MarketSnapshot) {
+    fn add_value(
+        buffer: &mut CoalescingRingBuffer<usize, MarketSnapshot>,
+        snapshot: MarketSnapshot,
+    ) {
         assert!(buffer.offer_value_only(snapshot));
     }
 }

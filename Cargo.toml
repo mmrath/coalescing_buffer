@@ -6,3 +6,7 @@ authors = ["Murali Mohan Rath <mmrath@gmail.com>"]
 [lib]
 name = "rbuf"
 path = "src/lib.rs"
+
+[[bin]]
+name = "cr_buf"
+path = "src/main.rs"
