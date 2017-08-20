@@ -66,9 +66,9 @@ fn next_power_of_two(capacity: usize) -> usize {
 
 
 impl<K, V> CoalescingRingBuffer<K, V>
-    where
-        K: Eq + Debug + Send,
-        V: Debug,
+where
+    K: Eq + Debug + Send,
+    V: Debug,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
@@ -238,8 +238,8 @@ unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> {}
 unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> {}
 
 fn drop_value<V>(val_ptr: *mut V)
-    where
-        V: Debug,
+where
+    V: Debug,
 {
     if !val_ptr.is_null() {
         let val = unsafe { Box::from_raw(val_ptr) };

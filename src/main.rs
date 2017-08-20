@@ -1,6 +1,8 @@
+#![feature(optin_builtin_traits)]
+
 extern crate rbuf;
 
-use rbuf::CoalescingRingBuffer;
+use rbuf::{CoalescingRingBuffer, Sender, Receiver, create_buf};
 use std::thread;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,9 +10,37 @@ use std::time::Duration;
 const POISON_PILL: i32 = -1;
 
 fn main() {
-    should_be_able_to_reuse_capacity();
+    //should_be_able_to_reuse_capacity();
+    spsc_buffer_test();
 }
 
+
+fn spsc_buffer_test() {
+    let (sx, rx) = create_buf::<i32>();
+    let producer = thread::spawn(move || {
+        for i in 0..10000000 {
+
+            sx.offer(i);
+            //thread::sleep(Duration::from_millis(0));
+        }
+        sx.offer(-1);
+    });
+
+    let consumer = thread::spawn(move || {
+        loop {
+            if let Some(ref value) =  rx.poll() {
+                println!("{:?}", value);
+                if *value == -1 {
+                    break;
+                }
+            }
+            //thread::sleep(Duration::from_millis(10));
+        }
+    });
+
+    let _ = producer.join();
+    let _ = consumer.join();
+}
 
 
 fn should_be_able_to_reuse_capacity() {
@@ -34,7 +64,6 @@ fn producer_task(buffer: Arc<CoalescingRingBuffer<i32, i32>>) -> bool {
         //thread::sleep(Duration::from_millis(100));
 
         for message in 1..10 {
-
             let success = buffer.offer(message, message);
             if !success {
                 buffer.offer_value_only(POISON_PILL);
