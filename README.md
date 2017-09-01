@@ -4,3 +4,8 @@
 
 An attempt to port Java [Coalescing Ring Buffer](https://github.com/LMAX-Exchange/LMAXCollections) to Rust
 
+# TO DO
+
+* There are fw test cases failing
+* Refactor to enforce one reader and one writer at compile time 
+
