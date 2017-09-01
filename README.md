@@ -6,6 +6,9 @@ An attempt to port Java [Coalescing Ring Buffer](https://github.com/LMAX-Exchang
 
 # TO DO
 
-* There are few test cases failing
-* Refactor to enforce one reader and one writer at compile time 
+* Add more functional test cases
+* Add performance test cases
+* Check alternative to ``feature(optin_builtin_traits)`` to run on stable rust
+* Add documentation
+* Compare with Java performance
 
