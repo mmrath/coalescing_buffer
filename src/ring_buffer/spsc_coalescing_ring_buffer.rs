@@ -29,16 +29,8 @@ impl<T> KeyCell<T> {
         }
     }
     pub fn set(&self, val: T) {
-        //let val_ptr = Box::into_raw(Box::new(val));
-        //let old_ptr = self.value.swap(val_ptr, Ordering::SeqCst);
-        //drop_value(old_ptr);
-
-        let old = self.replace(val);
+        let old = mem::replace(unsafe { &mut *self.value.get() }, val);
         drop(old);
-    }
-
-    fn replace(&self, val: T) -> T {
-        mem::replace(unsafe { &mut *self.value.get() }, val)
     }
 
     pub fn get(&self) -> &T {

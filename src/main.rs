@@ -44,10 +44,10 @@ fn mpsc_buffer_test() {
 
 
 fn should_be_able_to_reuse_capacity() {
-    let mut buffer: CoalescingRingBuffer<i32, i32> = CoalescingRingBuffer::new(32);
+    let  buffer: CoalescingRingBuffer<i32, i32> = CoalescingRingBuffer::new(32);
     let shared_buf = Arc::new(buffer);
-    let mut buf_clone1 = shared_buf.clone();
-    let mut buf_clone2 = shared_buf.clone();
+    let  buf_clone1 = shared_buf.clone();
+    let  buf_clone2 = shared_buf.clone();
     let producer = thread::spawn(move || producer_task(buf_clone1));
     let consumer = thread::spawn(move || consumer_task(buf_clone2));
 
@@ -59,10 +59,6 @@ fn should_be_able_to_reuse_capacity() {
 
 fn producer_task(buffer: Arc<CoalescingRingBuffer<i32, i32>>) -> bool {
     for run in 1..1000000 {
-        println!("P: {:}", run);
-        //println!("P: {:?}", buffer);
-        //thread::sleep(Duration::from_millis(100));
-
         for message in 1..10 {
             let success = buffer.offer(message, message);
             if !success {
