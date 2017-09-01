@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::{cmp, mem, ptr};
 use std::fmt::Debug;
 use std::cell::UnsafeCell;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct CoalescingRingBuffer<K, V> {
@@ -17,7 +18,7 @@ pub struct CoalescingRingBuffer<K, V> {
 }
 
 #[derive(Debug)]
-pub struct KeyCell<T> {
+pub(crate) struct KeyCell<T> {
     value: UnsafeCell<T>,
 }
 
@@ -178,7 +179,7 @@ where
 
         for x in last_cln..last_read {
             let index = self.mask(x + 1);
-            self.keys[index].replace(KeyHolder::Empty);
+            self.keys[index].set(KeyHolder::Empty);
             let old_val = self.values[index].swap(ptr::null_mut(), Ordering::SeqCst);
             drop_value(old_val);
         }
@@ -188,7 +189,7 @@ where
     fn store(&self, key: KeyHolder<K>, value: *mut V) {
         let next_write = self.next_write.load(Ordering::SeqCst);
         let index = self.mask(next_write);
-        self.keys[index].replace(key);
+        self.keys[index].set(key);
         let old_ptr = self.values[index].swap(value, Ordering::SeqCst);
         drop_value(old_ptr);
         self.next_write.store(next_write + 1, Ordering::SeqCst);
@@ -243,7 +244,75 @@ where
 {
     if !val_ptr.is_null() {
         let val = unsafe { Box::from_raw(val_ptr) };
+        drop(val);
     }
+}
+
+
+pub struct Receiver<K, V> {
+    buffer: Arc<CoalescingRingBuffer<K, V>>,
+}
+
+unsafe impl<K: Send, V: Send> Send for Receiver<K, V> {}
+
+impl<K, V> !Sync for Receiver<K, V> {}
+
+impl<K: Send + Eq + Debug, V: Send + Debug> Receiver<K, V> {
+    fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
+        Receiver { buffer: buf }
+    }
+
+    pub fn poll_all(&self) -> Vec<V> {
+        return self.buffer.poll_all();
+    }
+
+    pub fn poll(&self, max_items: usize) -> Vec<V> {
+        return self.buffer.poll(max_items);
+    }
+
+    pub fn size(&self) -> usize {
+        self.buffer.size()
+    }
+}
+
+
+pub struct Sender<K, V> {
+    buffer: Arc<CoalescingRingBuffer<K, V>>,
+}
+
+unsafe impl<K: Send, V: Send> Send for Sender<K, V> {}
+
+impl<K, V> !Sync for Sender<K, V> {}
+
+impl<K: Send + Eq + Debug, V: Send + Debug> Sender<K, V> {
+    fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
+        Sender { buffer: buf }
+    }
+
+    pub fn offer(&self, key: K, value: V) -> bool {
+        return self.buffer.offer(key, value);
+    }
+
+    pub fn offer_value_only(&self, value: V) -> bool {
+        return self.buffer.offer_value_only(value);
+    }
+
+    pub fn size(&self) -> usize {
+        self.buffer.size()
+    }
+
+    pub fn rejection_count(&self) -> usize {
+        self.buffer.rejection_count()
+    }
+}
+
+
+pub fn new_ring_buffer<K: Send + Eq + Debug, V: Send + Debug>(
+    capacity: usize,
+) -> (Sender<K, V>, Receiver<K, V>) {
+    let buf = Arc::new(CoalescingRingBuffer::new(capacity));
+    let buf_clone = buf.clone();
+    (Sender::new(buf), Receiver::new(buf_clone))
 }
 
 
@@ -251,3 +320,266 @@ where
 
 
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static VOD_SNAPSHOT_1: MarketSnapshot = MarketSnapshot {
+        instrument_id: 1,
+        bid: 3,
+        ask: 4,
+    };
+    static VOD_SNAPSHOT_2: MarketSnapshot = MarketSnapshot {
+        instrument_id: 1,
+        bid: 5,
+        ask: 6,
+    };
+    static BP_SNAPSHOT: MarketSnapshot = MarketSnapshot {
+        instrument_id: 2,
+        bid: 7,
+        ask: 8,
+    };
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct MarketSnapshot {
+        pub instrument_id: usize,
+        pub bid: isize,
+        pub ask: isize,
+    }
+
+    impl MarketSnapshot {
+        pub fn new(instrument_id: usize, best_bid: isize, best_ask: isize) -> Self {
+            MarketSnapshot {
+                instrument_id: instrument_id,
+                bid: best_bid,
+                ask: best_ask,
+            }
+        }
+    }
+
+    fn create_buffer(capacity: usize) -> CoalescingRingBuffer<usize, MarketSnapshot> {
+        CoalescingRingBuffer::new(capacity)
+    }
+
+
+    #[test]
+    fn should_correctly_increase_the_capacity_to_the_next_higher_power_of_two() {
+        check_capacity(1024, &create_buffer(1023));
+        check_capacity(1024, &create_buffer(1024));
+        check_capacity(2048, &create_buffer(1025));
+    }
+
+    fn check_capacity(capacity: usize, buffer: &CoalescingRingBuffer<usize, MarketSnapshot>) {
+        assert_eq!(capacity, buffer.capacity());
+        for i in 0..capacity {
+            let success = buffer.offer(0, MarketSnapshot::new(i, i as isize, i as isize));
+            assert!(success);
+        }
+    }
+
+    #[test]
+    fn should_correctly_report_size() {
+        let buffer = create_buffer(2);
+        assert_eq!(0, buffer.size());
+        assert!(buffer.is_empty());
+        assert!(!buffer.is_full());
+
+        buffer.offer_value_only(BP_SNAPSHOT.clone());
+        assert_eq!(1, buffer.size());
+        assert!(!buffer.is_empty());
+        assert!(!buffer.is_full());
+
+        buffer.offer(VOD_SNAPSHOT_1.instrument_id, VOD_SNAPSHOT_1.clone());
+        assert_eq!(2, buffer.size());
+        assert!(!buffer.is_empty());
+        assert!(buffer.is_full());
+
+        let _ = buffer.poll(1);
+        assert_eq!(1, buffer.size());
+        assert!(!buffer.is_empty());
+        assert!(!buffer.is_full());
+
+        let _ = buffer.poll(1);
+        assert_eq!(0, buffer.size());
+        assert!(buffer.is_empty());
+        assert!(!buffer.is_full());
+    }
+
+
+    #[test]
+    fn should_reject_new_keys_when_full() {
+        let buffer = create_buffer(2);
+        buffer.offer(1, BP_SNAPSHOT.clone());
+        buffer.offer(2, VOD_SNAPSHOT_1.clone());
+
+        assert!(!buffer.offer(4, VOD_SNAPSHOT_2.clone()));
+        assert_eq!(2, buffer.size());
+    }
+
+    #[test]
+    fn should_accept_existing_keys_when_full() {
+        let buffer = create_buffer(2);
+        buffer.offer(1, BP_SNAPSHOT.clone());
+        buffer.offer(2, VOD_SNAPSHOT_1.clone());
+
+        assert!(buffer.offer(2, VOD_SNAPSHOT_2.clone()));
+        assert_eq!(2, buffer.size());
+    }
+
+
+    #[test]
+    fn should_return_single_value() {
+        let buffer = create_buffer(2);
+
+        add_key_value(&buffer, BP_SNAPSHOT.clone());
+        assert_contains(&buffer, vec![BP_SNAPSHOT.clone()]);
+    }
+
+
+    #[test]
+    fn should_return_two_values_with_different_keys() {
+        let buffer = create_buffer(2);
+        add_key_value(&buffer, BP_SNAPSHOT.clone());
+        add_key_value(&buffer, VOD_SNAPSHOT_1.clone());
+
+        assert_contains(&buffer, vec![BP_SNAPSHOT.clone(), VOD_SNAPSHOT_1.clone()]);
+    }
+
+
+    #[test]
+    fn should_update_values_with_equal_keys() {
+        let buffer = create_buffer(2);
+        add_key_value(&buffer, VOD_SNAPSHOT_1.clone());
+        add_key_value(&buffer, VOD_SNAPSHOT_2.clone());
+        assert_contains(&buffer, vec![VOD_SNAPSHOT_2.clone()]);
+    }
+
+    #[test]
+    fn should_not_update_values_without_keys() {
+        let buffer = create_buffer(2);
+        add_value(&buffer, VOD_SNAPSHOT_1.clone());
+        add_value(&buffer, VOD_SNAPSHOT_2.clone());
+        assert_contains(
+            &buffer,
+            vec![VOD_SNAPSHOT_1.clone(), VOD_SNAPSHOT_2.clone()],
+        );
+    }
+
+    #[test]
+    fn should_update_values_with_equal_keys_and_preserve_ordering() {
+        let buffer = create_buffer(2);
+        add_key_value(&buffer, VOD_SNAPSHOT_1.clone());
+        add_key_value(&buffer, BP_SNAPSHOT.clone());
+        add_key_value(&buffer, VOD_SNAPSHOT_2.clone());
+
+        assert_contains(&buffer, vec![VOD_SNAPSHOT_2.clone(), BP_SNAPSHOT.clone()]);
+    }
+
+    #[test]
+    fn should_not_update_values_if_read_occurs_between_values() {
+        let buffer = create_buffer(2);
+
+        add_key_value(&buffer, VOD_SNAPSHOT_1.clone());
+        assert_contains(&buffer, vec![VOD_SNAPSHOT_1.clone()]);
+
+        add_key_value(&buffer, VOD_SNAPSHOT_2.clone());
+        assert_contains(&buffer, vec![VOD_SNAPSHOT_2.clone()]);
+    }
+
+
+    #[test]
+    fn should_return_only_the_maximum_number_of_requested_items() {
+        let buffer = create_buffer(10);
+        add_value(&buffer, BP_SNAPSHOT.clone());
+        add_value(&buffer, VOD_SNAPSHOT_1.clone());
+        add_value(&buffer, VOD_SNAPSHOT_2.clone());
+
+        let snapshots = buffer.poll(2);
+        assert_eq!(2, snapshots.len());
+        assert_eq!(&BP_SNAPSHOT, snapshots.get(0).unwrap());
+        assert_eq!(&VOD_SNAPSHOT_1, snapshots.get(1).unwrap());
+
+        let snapshots = buffer.poll(1);
+        assert_eq!(1, snapshots.len());
+        assert_eq!(&VOD_SNAPSHOT_2, snapshots.get(0).unwrap());
+
+        assert_is_empty(&buffer);
+    }
+
+
+    #[test]
+    fn should_return_all_items_without_request_limit() {
+        let buffer = create_buffer(10);
+        add_value(&buffer, BP_SNAPSHOT.clone());
+        add_key_value(&buffer, VOD_SNAPSHOT_1.clone());
+        add_key_value(&buffer, VOD_SNAPSHOT_2.clone());
+
+        let snapshots = buffer.poll_all();
+        assert_eq!(2, snapshots.len());
+
+        assert_eq!(&BP_SNAPSHOT, snapshots.get(0).unwrap());
+        assert_eq!(&VOD_SNAPSHOT_2, snapshots.get(1).unwrap());
+
+        assert_is_empty(&buffer);
+    }
+
+
+    #[test]
+    fn should_count_rejections() {
+        let buffer = create_buffer(2);
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer_value_only(BP_SNAPSHOT.clone());
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer(1, VOD_SNAPSHOT_1.clone());
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer(1, VOD_SNAPSHOT_2.clone());
+        assert_eq!(0, buffer.rejection_count());
+
+        buffer.offer_value_only(BP_SNAPSHOT.clone());
+        assert_eq!(1, buffer.rejection_count());
+
+        buffer.offer(2, BP_SNAPSHOT.clone());
+        assert_eq!(2, buffer.rejection_count());
+    }
+
+    #[test]
+    fn should_use_object_equality_to_compare_keys() {
+        let buffer: CoalescingRingBuffer<String, MarketSnapshot> = CoalescingRingBuffer::new(2);
+
+        buffer.offer(String::from("boo"), BP_SNAPSHOT.clone());
+        buffer.offer(String::from("boo"), BP_SNAPSHOT.clone());
+
+        assert_eq!(1, buffer.size());
+    }
+
+    fn assert_is_empty(buffer: &CoalescingRingBuffer<usize, MarketSnapshot>) {
+        assert_contains(buffer, vec![]);
+    }
+
+
+    fn add_key_value(
+        buffer: &CoalescingRingBuffer<usize, MarketSnapshot>,
+        snapshot: MarketSnapshot,
+    ) {
+        assert!(buffer.offer(snapshot.instrument_id, snapshot));
+    }
+
+
+    fn assert_contains(
+        buffer: &CoalescingRingBuffer<usize, MarketSnapshot>,
+        expected: Vec<MarketSnapshot>,
+    ) -> bool {
+        let actual = buffer.poll_all();
+        let ret = (actual.len() == expected.len()) && // zip stops at the shortest
+            actual.iter().zip(expected).all(|(a, b)| a == &b);
+        return ret;
+    }
+
+    fn add_value(buffer: &CoalescingRingBuffer<usize, MarketSnapshot>, snapshot: MarketSnapshot) {
+        assert!(buffer.offer_value_only(snapshot));
+    }
+}

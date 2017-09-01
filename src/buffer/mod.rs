@@ -1,2 +1,2 @@
 mod mpsc_coalescing_buffer;
-pub use self::mpsc_coalescing_buffer::{Receiver, Sender, create_buf};
+pub use self::mpsc_coalescing_buffer::{create_buf, Receiver, Sender};

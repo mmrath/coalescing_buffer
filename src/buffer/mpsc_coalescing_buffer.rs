@@ -1,9 +1,6 @@
-#![feature(optin_builtin_traits)]
 
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::{cmp, mem, ptr};
-use std::fmt::Debug;
-use std::cell::UnsafeCell;
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::ptr;
 use std::sync::Arc;
 
 

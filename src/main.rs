@@ -3,7 +3,7 @@
 extern crate rbuf;
 
 use rbuf::ring_buffer::CoalescingRingBuffer;
-use rbuf::buffer::{Sender, Receiver, create_buf};
+use rbuf::buffer::{create_buf, Receiver, Sender};
 use std::thread;
 use std::sync::Arc;
 use std::time::Duration;

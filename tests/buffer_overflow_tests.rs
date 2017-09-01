@@ -5,43 +5,37 @@ extern crate rbuf;
 mod tests {
     use rbuf::ring_buffer::*;
     use std::thread;
-    use std::sync::Arc;
-    use std::cell::Cell;
 
     const POISON_PILL: i32 = -1;
 
 
     #[test]
     fn should_be_able_to_reuse_capacity() {
-        let mut buffer: CoalescingRingBuffer<i32, i32> = CoalescingRingBuffer::new(32);
-        let shared_buf = Arc::new(buffer);
-        let mut buf_clone1 = shared_buf.clone();
-        let mut buf_clone2 = shared_buf.clone();
-        let producer = thread::spawn(move || producer_task(buf_clone1));
-        let consumer = thread::spawn(move || consumer_task(buf_clone2));
+        let (sender, receiver) = new_ring_buffer(32);
+        let producer = thread::spawn(move || producer_task(sender));
+        let _ = thread::spawn(move || consumer_task(receiver));
 
         let producer_overflow = producer.join().unwrap();
         assert!(!producer_overflow, "ring buffer has overflowed");
     }
 
-    fn producer_task(mut shared_buf: Arc<CoalescingRingBuffer<i32, i32>>) -> bool {
-        let mut buffer = shared_buf;
-        for run in 0..1000000 {
+    fn producer_task( sender: Sender<i32, i32>) -> bool {
+        for run in 0..100000 {
             for message in 0..10 {
-                let success = buffer.offer(message, run * 10 + message);
+                let success = sender.offer(message, run * 10 + message);
                 if !success {
-                    buffer.offer_value_only(POISON_PILL);
+                    sender.offer_value_only(POISON_PILL);
                     return true;
                 }
             }
         }
-        buffer.offer_value_only(POISON_PILL);
+        sender.offer_value_only(POISON_PILL);
         return false;
     }
 
-    fn consumer_task(mut buffer: Arc<CoalescingRingBuffer<i32, i32>>) {
+    fn consumer_task(receiver: Receiver<i32, i32>) {
         loop {
-            let values = buffer.poll(100);
+            let values = receiver.poll(100);
             if values.contains(&POISON_PILL) {
                 return;
             }
