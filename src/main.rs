@@ -2,7 +2,8 @@
 
 extern crate rbuf;
 
-use rbuf::{CoalescingRingBuffer, Sender, Receiver, create_buf};
+use rbuf::ring_buffer::CoalescingRingBuffer;
+use rbuf::buffer::{Sender, Receiver, create_buf};
 use std::thread;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,15 +12,14 @@ const POISON_PILL: i32 = -1;
 
 fn main() {
     //should_be_able_to_reuse_capacity();
-    spsc_buffer_test();
+    mpsc_buffer_test();
 }
 
 
-fn spsc_buffer_test() {
+fn mpsc_buffer_test() {
     let (sx, rx) = create_buf::<i32>();
     let producer = thread::spawn(move || {
         for i in 0..10000000 {
-
             sx.offer(i);
             //thread::sleep(Duration::from_millis(0));
         }
@@ -28,7 +28,7 @@ fn spsc_buffer_test() {
 
     let consumer = thread::spawn(move || {
         loop {
-            if let Some(ref value) =  rx.poll() {
+            if let Some(ref value) = rx.poll() {
                 println!("{:?}", value);
                 if *value == -1 {
                     break;

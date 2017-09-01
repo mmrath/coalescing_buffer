@@ -58,8 +58,6 @@ pub struct Sender<T> {
 
 unsafe impl<T: Send> Send for Sender<T> {}
 
-impl<T> !Sync for Sender<T> {}
-
 impl<T: Send> Receiver<T> {
     fn new(buf: Arc<Buffer<T>>) -> Self {
         Receiver { buffer: buf }

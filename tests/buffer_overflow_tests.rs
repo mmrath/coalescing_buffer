@@ -3,7 +3,7 @@ extern crate rbuf;
 
 #[cfg(test)]
 mod tests {
-    use rbuf::*;
+    use rbuf::ring_buffer::*;
     use std::thread;
     use std::sync::Arc;
     use std::cell::Cell;

@@ -3,7 +3,7 @@ extern crate rbuf;
 
 #[cfg(test)]
 mod tests {
-    use rbuf::*;
+    use rbuf::ring_buffer::*;
 
     static VOD_SNAPSHOT_1: MarketSnapshot = MarketSnapshot {
         instrument_id: 1,
