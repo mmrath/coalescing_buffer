@@ -1,7 +1,16 @@
 [package]
 name = "coalescing_buffer"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Murali Mohan Rath <mmrath@gmail.com>"]
+license = "MIT/Apache-2.0"
+description = "Coalescing Ring Buffer"
+homepage = "https://github.com/mmrath/coalescing_buffer"
+keywords = ["coalescing", "ring", "buffer"]
+readme = "README.md"
+include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[badges]
+travis-ci = { repository = "mmrath/coalescing_buffer" }
 
 [lib]
 name = "coalescing_buffer"
