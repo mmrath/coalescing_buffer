@@ -1,9 +1,9 @@
-extern crate rbuf;
+extern crate coalescing_buffer;
 
 
 #[cfg(test)]
 mod tests {
-    use rbuf::ring_buffer::*;
+    use coalescing_buffer::ring::*;
     use std::thread;
 
     const POISON_PILL: i32 = -1;
@@ -16,7 +16,7 @@ mod tests {
         let _ = thread::spawn(move || consumer_task(receiver));
 
         let producer_overflow = producer.join().unwrap();
-        assert!(!producer_overflow, "ring buffer has overflowed");
+        assert!(!producer_overflow, "ring simple has overflowed");
     }
 
     fn producer_task(sender: Sender<i32, i32>) -> bool {

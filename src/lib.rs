@@ -1,3 +1,3 @@
 
-pub mod buffer;
-pub mod ring_buffer;
+pub mod simple;
+pub mod ring;

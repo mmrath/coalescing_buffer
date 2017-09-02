@@ -1,12 +1,12 @@
 [package]
-name = "rbuf"
+name = "coalescing_buffer"
 version = "0.1.0"
 authors = ["Murali Mohan Rath <mmrath@gmail.com>"]
 
 [lib]
-name = "rbuf"
+name = "coalescing_buffer"
 path = "src/lib.rs"
 
 [[bin]]
-name = "cr_buf"
+name = "coalescing_buffer_main"
 path = "src/main.rs"

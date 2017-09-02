@@ -1,10 +1,10 @@
-extern crate rbuf;
+extern crate coalescing_buffer;
 
 
 #[cfg(test)]
 #[allow(dead_code, unused)]
 mod tests {
-    use rbuf::ring_buffer::{new_ring_buffer, Receiver, Sender};
+    use coalescing_buffer::ring::{new_ring_buffer, Receiver, Sender};
 
     static VOD_SNAPSHOT_1: MarketSnapshot = MarketSnapshot {
         instrument_id: 1,

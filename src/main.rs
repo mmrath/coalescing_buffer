@@ -1,7 +1,7 @@
-extern crate rbuf;
+extern crate coalescing_buffer;
 
-use rbuf::ring_buffer::CoalescingRingBuffer;
-use rbuf::buffer::{create_buf, Receiver, Sender};
+use coalescing_buffer::ring::CoalescingRingBuffer;
+use coalescing_buffer::simple::{create_buf, Receiver, Sender};
 use std::thread;
 use std::sync::Arc;
 use std::time::Duration;
@@ -62,7 +62,7 @@ fn should_be_able_to_reuse_capacity() {
 
     let producer_overflow = producer.join().unwrap();
     let _ = consumer.join();
-    assert!(!producer_overflow, "ring buffer has overflowed");
+    assert!(!producer_overflow, "ring simple has overflowed");
     println!("Completed successfully");
 }
 
