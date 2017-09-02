@@ -1,11 +1,15 @@
-/// # Simple Buffer Usage Example
+/// This is similar to having an atomic variable shared. The only difference is only one receiver
+/// thread is allowed.
+///
 /// ```
-/// use coalescing_buffer::simple::create_buf;
+/// extern crate coalescing_buffer;
+///
+/// use coalescing_buffer::simple::new_simple_buffer;
 /// use std::thread;
 /// use std::sync::Arc;
 ///
 /// fn main(){
-///     let (sx, rx) = create_buf::<i32>();
+///     let (sx, rx) = new_simple_buffer::<i32>();
 ///
 ///     let sx = Arc::new(sx);
 ///     let sx1 = sx.clone();
@@ -39,9 +43,15 @@
 /// }
 /// ```
 ///
-/// # Ring buffer usage
+pub mod simple;
+
+
+/// Coalescing ring buffer is a circular buffer of key and value pair(like a map). A update with
+/// same key will replace the value if the value is not yet read
 ///
 /// ```
+/// extern crate coalescing_buffer;
+///
 /// use coalescing_buffer::ring::*;
 /// use std::thread;
 ///
@@ -49,7 +59,7 @@
 ///
 ///
 /// fn main() {
-///     let (sender, receiver) = new_ring_buffer(32);
+///     let (sender, receiver) = new_ring_buffer(25); // This will be changed to 32 nearest 2^x
 ///     let producer = thread::spawn(move || producer_task(sender));
 ///     let consumer = thread::spawn(move || consumer_task(receiver));
 ///
@@ -82,7 +92,4 @@
 /// }
 /// ```
 ///
-
-
-pub mod simple;
 pub mod ring;

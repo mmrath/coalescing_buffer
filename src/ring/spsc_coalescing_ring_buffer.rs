@@ -302,7 +302,11 @@ impl<K: Send + Eq, V: Send> Sender<K, V> {
     }
 }
 
-
+/// Creates a ring buffer and provides a sender(to produce) and a receiver(consumer) to send/receive
+/// data of the buffer. Sender and Receiver can only be access by one thread
+///
+/// `let (sender, receiver) = new_ring_buffer(25);`
+///
 pub fn new_ring_buffer<K: Send + Eq, V: Send>(capacity: usize) -> (Sender<K, V>, Receiver<K, V>) {
     let buf = Arc::new(CoalescingRingBuffer::new(capacity));
     let buf_clone = buf.clone();

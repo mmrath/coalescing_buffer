@@ -1,6 +1,6 @@
 extern crate coalescing_buffer;
 
-use coalescing_buffer::simple::create_buf;
+use coalescing_buffer::simple::new_simple_buffer;
 use std::thread;
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ fn main() {
 
 
 fn mpsc_buffer_test() {
-    let (sx, rx) = create_buf::<i32>();
+    let (sx, rx) = new_simple_buffer::<i32>();
 
     let sx = Arc::new(sx);
     let sx1 = sx.clone();

@@ -68,7 +68,12 @@ impl<T: Send> Sender<T> {
 }
 
 
-pub fn create_buf<T: Send>() -> (Sender<T>, Receiver<T>) {
+/// Creates a ring buffer and provides a sender(producer) and a receiver(consumer) to send/receive
+/// data to/from the buffer. Sender and Receiver can only be access by one thread
+///
+/// `let (sender, receiver) = new_simple_buffer(25);`
+///
+pub fn new_simple_buffer<T: Send>() -> (Sender<T>, Receiver<T>) {
     let buf = Arc::new(Buffer::new());
     let buf_clone = buf.clone();
     (Sender::new(buf), Receiver::new(buf_clone))

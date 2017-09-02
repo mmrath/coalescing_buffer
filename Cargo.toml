@@ -1,6 +1,6 @@
 [package]
 name = "coalescing_buffer"
-version = "0.0.1"
+version = "0.0.3"
 authors = ["Murali Mohan Rath <mmrath@gmail.com>"]
 license = "MIT/Apache-2.0"
 description = "Coalescing Ring Buffer"
