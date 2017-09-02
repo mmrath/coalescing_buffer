@@ -1,5 +1,3 @@
-#![feature(optin_builtin_traits)]
-
 extern crate rbuf;
 
 use rbuf::ring_buffer::CoalescingRingBuffer;
@@ -18,27 +16,38 @@ fn main() {
 
 fn mpsc_buffer_test() {
     let (sx, rx) = create_buf::<i32>();
-    let producer = thread::spawn(move || {
+
+    let sx = Arc::new(sx);
+    let sx1 = sx.clone();
+
+    let producer0 = thread::spawn(move || {
         for i in 0..10000000 {
             sx.offer(i);
-            //thread::sleep(Duration::from_millis(0));
         }
         sx.offer(-1);
+    });
+
+    let producer1 = thread::spawn(move || {
+        for i in 0..10000000 {
+            sx1.offer(i);
+        }
+        sx1.offer(-1);
     });
 
     let consumer = thread::spawn(move || {
         loop {
             if let Some(ref value) = rx.poll() {
-                println!("{:?}", value);
                 if *value == -1 {
                     break;
                 }
             }
-            //thread::sleep(Duration::from_millis(10));
         }
     });
 
-    let _ = producer.join();
+
+
+    let _ = producer0.join();
+    let _ = producer1.join();
     let _ = consumer.join();
 }
 

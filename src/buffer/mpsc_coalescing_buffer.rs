@@ -1,7 +1,7 @@
-
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::ptr;
 use std::sync::Arc;
+use std::marker::PhantomData;
 
 
 struct Buffer<T> {
@@ -33,11 +33,26 @@ impl<T: Send> Buffer<T> {
 
 pub struct Receiver<T> {
     buffer: Arc<Buffer<T>>,
+    _phantom_data: PhantomData<*mut ()>
 }
 
 unsafe impl<T: Send> Send for Receiver<T> {}
 
-impl<T> !Sync for Receiver<T> {}
+impl<T: Send> Receiver<T> {
+    fn new(buf: Arc<Buffer<T>>) -> Self {
+        Receiver { buffer: buf, _phantom_data: PhantomData }
+    }
+
+    pub fn poll(&self) -> Option<T> {
+        self.buffer.poll()
+    }
+}
+
+pub struct Sender<T> {
+    buffer: Arc<Buffer<T>>,
+}
+
+unsafe impl<T: Send> Send for Sender<T> {}
 
 impl<T: Send> Sender<T> {
     fn new(buf: Arc<Buffer<T>>) -> Self {
@@ -49,21 +64,6 @@ impl<T: Send> Sender<T> {
     }
 }
 
-pub struct Sender<T> {
-    buffer: Arc<Buffer<T>>,
-}
-
-unsafe impl<T: Send> Send for Sender<T> {}
-
-impl<T: Send> Receiver<T> {
-    fn new(buf: Arc<Buffer<T>>) -> Self {
-        Receiver { buffer: buf }
-    }
-
-    pub fn poll(&self) -> Option<T> {
-        self.buffer.poll()
-    }
-}
 
 pub fn create_buf<T: Send>() -> (Sender<T>, Receiver<T>) {
     let buf = Arc::new(Buffer::new());

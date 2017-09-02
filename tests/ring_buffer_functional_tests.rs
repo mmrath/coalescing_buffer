@@ -2,7 +2,7 @@ extern crate rbuf;
 
 
 #[cfg(test)]
-#[allow(dead_code,unused)]
+#[allow(dead_code, unused)]
 mod tests {
     use rbuf::ring_buffer::{new_ring_buffer, Receiver, Sender};
 

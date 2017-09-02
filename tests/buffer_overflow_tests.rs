@@ -19,7 +19,7 @@ mod tests {
         assert!(!producer_overflow, "ring buffer has overflowed");
     }
 
-    fn producer_task( sender: Sender<i32, i32>) -> bool {
+    fn producer_task(sender: Sender<i32, i32>) -> bool {
         for run in 0..100000 {
             for message in 0..10 {
                 let success = sender.offer(message, run * 10 + message);

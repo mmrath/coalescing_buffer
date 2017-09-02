@@ -3,6 +3,8 @@ use std::{cmp, mem, ptr};
 use std::fmt::Debug;
 use std::cell::UnsafeCell;
 use std::sync::Arc;
+use std::marker::PhantomData;
+
 
 #[derive(Debug)]
 pub struct CoalescingRingBuffer<K, V> {
@@ -209,8 +211,8 @@ where
             let index = self.mask(read_index);
             let val = self.values[index].swap(ptr::null_mut(), Ordering::SeqCst);
             if val.is_null() {
-                println!("{:?}", self);
-                println!("claim_up_to:{:?}", claim_up_to);
+                //println!("{:?}", self);
+                //println!("claim_up_to:{:?}", claim_up_to);
                 panic!("Null pointer is not expected here!")
             } else {
                 bucket.push(unsafe { *(Box::from_raw(val)) });
@@ -243,15 +245,14 @@ where
 
 pub struct Receiver<K, V> {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
+    _phantom_data: PhantomData<*mut ()> //This to make sure we have only one thread access this
 }
 
 unsafe impl<K: Send, V: Send> Send for Receiver<K, V> {}
 
-impl<K, V> !Sync for Receiver<K, V> {}
-
 impl<K: Send + Eq + Debug, V: Send + Debug> Receiver<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
-        Receiver { buffer: buf }
+        Receiver { buffer: buf, _phantom_data: PhantomData }
     }
 
     pub fn poll_all(&self) -> Vec<V> {
@@ -270,15 +271,14 @@ impl<K: Send + Eq + Debug, V: Send + Debug> Receiver<K, V> {
 
 pub struct Sender<K, V> {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
+    _phantom_data: PhantomData<*mut ()> //This to make sure we have only one thread access this
 }
 
 unsafe impl<K: Send, V: Send> Send for Sender<K, V> {}
 
-impl<K, V> !Sync for Sender<K, V> {}
-
 impl<K: Send + Eq + Debug, V: Send + Debug> Sender<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
-        Sender { buffer: buf }
+        Sender { buffer: buf, _phantom_data: PhantomData }
     }
 
     pub fn offer(&self, key: K, value: V) -> bool {

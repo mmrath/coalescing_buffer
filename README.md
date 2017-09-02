@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/mmrath/rbuf.svg?branch=master)](https://travis-ci.org/mmrath/rbuf)
+[![Build Status](https://travis-ci.org/mmrath/coalescing_buffer.svg?branch=master)](https://travis-ci.org/mmrath/coalescing_buffer)
 
 # Rust Coalescing Ring Buffer
 
