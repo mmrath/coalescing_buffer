@@ -1,6 +1,6 @@
 extern crate coalescing_buffer;
 
-use coalescing_buffer::simple::{create_buf};
+use coalescing_buffer::simple::create_buf;
 use std::thread;
 use std::sync::Arc;
 
@@ -30,20 +30,15 @@ fn mpsc_buffer_test() {
         sx1.offer(-1);
     });
 
-    let consumer = thread::spawn(move || {
-        loop {
-            if let Some(ref value) = rx.poll() {
-                if *value == -1 {
-                    break;
-                }
+    let consumer = thread::spawn(move || loop {
+        if let Some(ref value) = rx.poll() {
+            if *value == -1 {
+                break;
             }
         }
     });
-
-
 
     let _ = producer0.join();
     let _ = producer1.join();
     let _ = consumer.join();
 }
-

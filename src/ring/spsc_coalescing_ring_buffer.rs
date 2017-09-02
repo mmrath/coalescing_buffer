@@ -1,13 +1,12 @@
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::{cmp, mem, ptr};
-use std::fmt::Debug;
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
 
 #[derive(Debug)]
-pub struct CoalescingRingBuffer<K, V> {
+struct CoalescingRingBuffer<K, V> {
     next_write: AtomicUsize,
     last_cleaned: AtomicUsize,
     rejection_count: AtomicUsize,
@@ -20,7 +19,7 @@ pub struct CoalescingRingBuffer<K, V> {
 }
 
 #[derive(Debug)]
-pub(crate) struct KeyCell<T> {
+struct KeyCell<T> {
     value: UnsafeCell<T>,
 }
 
@@ -59,11 +58,11 @@ fn next_power_of_two(capacity: usize) -> usize {
     return v;
 }
 
-
+#[allow(unused)]
 impl<K, V> CoalescingRingBuffer<K, V>
 where
-    K: Eq + Debug + Send,
-    V: Debug,
+    K: Eq + Send,
+    V: Send,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
@@ -229,12 +228,11 @@ where
 
 
 unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> {}
-
 unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> {}
 
 fn drop_value<V>(val_ptr: *mut V)
 where
-    V: Debug,
+    V: Send,
 {
     if !val_ptr.is_null() {
         let val = unsafe { Box::from_raw(val_ptr) };
@@ -245,14 +243,17 @@ where
 
 pub struct Receiver<K, V> {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
-    _phantom_data: PhantomData<*mut ()> //This to make sure we have only one thread access this
+    _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
 unsafe impl<K: Send, V: Send> Send for Receiver<K, V> {}
 
-impl<K: Send + Eq + Debug, V: Send + Debug> Receiver<K, V> {
+impl<K: Send + Eq, V: Send> Receiver<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
-        Receiver { buffer: buf, _phantom_data: PhantomData }
+        Receiver {
+            buffer: buf,
+            _phantom_data: PhantomData,
+        }
     }
 
     pub fn poll_all(&self) -> Vec<V> {
@@ -271,14 +272,17 @@ impl<K: Send + Eq + Debug, V: Send + Debug> Receiver<K, V> {
 
 pub struct Sender<K, V> {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
-    _phantom_data: PhantomData<*mut ()> //This to make sure we have only one thread access this
+    _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
 unsafe impl<K: Send, V: Send> Send for Sender<K, V> {}
 
-impl<K: Send + Eq + Debug, V: Send + Debug> Sender<K, V> {
+impl<K: Send + Eq, V: Send> Sender<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
-        Sender { buffer: buf, _phantom_data: PhantomData }
+        Sender {
+            buffer: buf,
+            _phantom_data: PhantomData,
+        }
     }
 
     pub fn offer(&self, key: K, value: V) -> bool {
@@ -299,9 +303,7 @@ impl<K: Send + Eq + Debug, V: Send + Debug> Sender<K, V> {
 }
 
 
-pub fn new_ring_buffer<K: Send + Eq + Debug, V: Send + Debug>(
-    capacity: usize,
-) -> (Sender<K, V>, Receiver<K, V>) {
+pub fn new_ring_buffer<K: Send + Eq, V: Send>(capacity: usize) -> (Sender<K, V>, Receiver<K, V>) {
     let buf = Arc::new(CoalescingRingBuffer::new(capacity));
     let buf_clone = buf.clone();
     (Sender::new(buf), Receiver::new(buf_clone))

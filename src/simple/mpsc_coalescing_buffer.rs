@@ -33,14 +33,17 @@ impl<T: Send> Buffer<T> {
 
 pub struct Receiver<T> {
     buffer: Arc<Buffer<T>>,
-    _phantom_data: PhantomData<*mut ()>
+    _phantom_data: PhantomData<*mut ()>,
 }
 
 unsafe impl<T: Send> Send for Receiver<T> {}
 
 impl<T: Send> Receiver<T> {
     fn new(buf: Arc<Buffer<T>>) -> Self {
-        Receiver { buffer: buf, _phantom_data: PhantomData }
+        Receiver {
+            buffer: buf,
+            _phantom_data: PhantomData,
+        }
     }
 
     pub fn poll(&self) -> Option<T> {
