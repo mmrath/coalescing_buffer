@@ -1,13 +1,15 @@
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::{cmp, mem, ptr};
-use std::cell::UnsafeCell;
-use std::sync::Arc;
-use std::marker::PhantomData;
 use crossbeam_utils::atomic::AtomicCell;
-
+use std::cell::UnsafeCell;
+use std::marker::PhantomData;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::{cmp, mem};
 
 #[derive(Debug)]
-struct CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {
+struct CoalescingRingBuffer<K, V>
+where
+    V: Send + Eq + Copy,
+{
     next_write: AtomicUsize,
     last_cleaned: AtomicUsize,
     rejection_count: AtomicUsize,
@@ -101,7 +103,6 @@ where
             }
         }
     }
-
 
     pub fn capacity(&self) -> usize {
         return self.capacity;
@@ -222,20 +223,20 @@ where
     }
 }
 
-
 unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {}
 unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {}
 
-
-
-pub struct Receiver<K, V> where V: Send + Eq + Copy {
+pub struct Receiver<K, V>
+where
+    V: Send + Eq + Copy,
+{
     buffer: Arc<CoalescingRingBuffer<K, V>>,
     _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
 unsafe impl<K: Send, V: Send> Send for Receiver<K, V> where V: Send + Eq + Copy {}
 
-impl<K: Send + Eq, V: Send+Eq+Copy> Receiver<K, V> {
+impl<K: Send + Eq, V: Send + Eq + Copy> Receiver<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
         Receiver {
             buffer: buf,
@@ -256,15 +257,20 @@ impl<K: Send + Eq, V: Send+Eq+Copy> Receiver<K, V> {
     }
 }
 
-
-pub struct Sender<K, V> where V: Send + Eq + Copy{
+pub struct Sender<K, V>
+where
+    V: Send + Eq + Copy,
+{
     buffer: Arc<CoalescingRingBuffer<K, V>>,
     _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
-unsafe impl<K: Send, V: Send> Send for Sender<K, V> where V: Send + Eq + Copy{}
+unsafe impl<K: Send, V: Send> Send for Sender<K, V> where V: Send + Eq + Copy {}
 
-impl<K: Send + Eq, V: Send> Sender<K, V> where V: Send + Eq + Copy {
+impl<K: Send + Eq, V: Send> Sender<K, V>
+where
+    V: Send + Eq + Copy,
+{
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
         Sender {
             buffer: buf,
@@ -294,17 +300,13 @@ impl<K: Send + Eq, V: Send> Sender<K, V> where V: Send + Eq + Copy {
 ///
 /// `let (sender, receiver) = new_ring_buffer(25);`
 ///
-pub fn new_ring_buffer<K: Send + Eq, V: Send + Eq + Copy >(capacity: usize) -> (Sender<K, V>, Receiver<K, V>) {
+pub fn new_ring_buffer<K: Send + Eq, V: Send + Eq + Copy>(
+    capacity: usize,
+) -> (Sender<K, V>, Receiver<K, V>) {
     let buf = Arc::new(CoalescingRingBuffer::new(capacity));
     let buf_clone = buf.clone();
     (Sender::new(buf), Receiver::new(buf_clone))
 }
-
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -346,7 +348,6 @@ mod tests {
     fn create_buffer(capacity: usize) -> CoalescingRingBuffer<usize, MarketSnapshot> {
         CoalescingRingBuffer::new(capacity)
     }
-
 
     #[test]
     fn should_correctly_increase_the_capacity_to_the_next_higher_power_of_two() {
@@ -391,7 +392,6 @@ mod tests {
         assert!(!buffer.is_full());
     }
 
-
     #[test]
     fn should_reject_new_keys_when_full() {
         let buffer = create_buffer(2);
@@ -412,7 +412,6 @@ mod tests {
         assert_eq!(2, buffer.size());
     }
 
-
     #[test]
     fn should_return_single_value() {
         let buffer = create_buffer(2);
@@ -420,7 +419,6 @@ mod tests {
         add_key_value(&buffer, BP_SNAPSHOT.clone());
         assert_contains(&buffer, vec![BP_SNAPSHOT.clone()]);
     }
-
 
     #[test]
     fn should_return_two_values_with_different_keys() {
@@ -430,7 +428,6 @@ mod tests {
 
         assert_contains(&buffer, vec![BP_SNAPSHOT.clone(), VOD_SNAPSHOT_1.clone()]);
     }
-
 
     #[test]
     fn should_update_values_with_equal_keys() {
@@ -472,7 +469,6 @@ mod tests {
         assert_contains(&buffer, vec![VOD_SNAPSHOT_2.clone()]);
     }
 
-
     #[test]
     fn should_return_only_the_maximum_number_of_requested_items() {
         let buffer = create_buffer(10);
@@ -492,7 +488,6 @@ mod tests {
         assert_is_empty(&buffer);
     }
 
-
     #[test]
     fn should_return_all_items_without_request_limit() {
         let buffer = create_buffer(10);
@@ -508,7 +503,6 @@ mod tests {
 
         assert_is_empty(&buffer);
     }
-
 
     #[test]
     fn should_count_rejections() {
@@ -545,14 +539,12 @@ mod tests {
         assert_contains(buffer, vec![]);
     }
 
-
     fn add_key_value(
         buffer: &CoalescingRingBuffer<usize, MarketSnapshot>,
         snapshot: MarketSnapshot,
     ) {
         assert!(buffer.offer(snapshot.instrument_id, snapshot));
     }
-
 
     fn assert_contains(
         buffer: &CoalescingRingBuffer<usize, MarketSnapshot>,

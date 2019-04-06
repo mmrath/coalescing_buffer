@@ -1,6 +1,3 @@
-
-
-
 #[cfg(test)]
 mod tests {
     use coalescing_buffer::ring::*;
@@ -8,12 +5,11 @@ mod tests {
 
     const POISON_PILL: i32 = -1;
 
-
     #[test]
     fn should_be_able_to_reuse_capacity() {
         let (sender, receiver) = new_ring_buffer(32);
         let producer = thread::spawn(move || producer_task(sender));
-        let con = thread::spawn(move || consumer_task(receiver));
+        let _consumer = thread::spawn(move || consumer_task(receiver));
 
         let producer_overflow = producer.join().unwrap();
         assert!(!producer_overflow, "ring simple has overflowed");
@@ -41,6 +37,5 @@ mod tests {
             }
         }
     }
-
 
 }

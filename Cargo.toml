@@ -13,13 +13,5 @@ include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-
 [badges]
 travis-ci = { repository = "mmrath/coalescing_buffer" }
 
-[lib]
-name = "coalescing_buffer"
-path = "src/lib.rs"
-
-[[bin]]
-name = "coalescing_buffer_main"
-path = "src/main.rs"
-
 [dependencies]
 crossbeam-utils = "0.6"

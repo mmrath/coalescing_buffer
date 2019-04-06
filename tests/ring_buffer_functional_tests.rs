@@ -1,6 +1,3 @@
-
-
-
 #[cfg(test)]
 #[allow(dead_code, unused)]
 mod tests {
@@ -39,7 +36,6 @@ mod tests {
         }
     }
 
-
     fn create_buf(
         capacity: usize,
     ) -> (
@@ -48,10 +44,6 @@ mod tests {
     ) {
         new_ring_buffer(capacity)
     }
-
-
-
-
 
     #[test]
     fn should_reject_new_keys_when_full() {
@@ -73,7 +65,6 @@ mod tests {
         assert_eq!(2, sender.size());
     }
 
-
     #[test]
     fn should_return_single_value() {
         let (sender, receiver) = create_buf(2);
@@ -81,7 +72,6 @@ mod tests {
         add_key_value(&sender, BP_SNAPSHOT.clone());
         assert_contains(&receiver, vec![BP_SNAPSHOT.clone()]);
     }
-
 
     #[test]
     fn should_return_two_values_with_different_keys() {
@@ -91,7 +81,6 @@ mod tests {
 
         assert_contains(&receiver, vec![BP_SNAPSHOT.clone(), VOD_SNAPSHOT_1.clone()]);
     }
-
 
     #[test]
     fn should_update_values_with_equal_keys() {
@@ -133,7 +122,6 @@ mod tests {
         assert_contains(&receiver, vec![VOD_SNAPSHOT_2.clone()]);
     }
 
-
     #[test]
     fn should_return_only_the_maximum_number_of_requested_items() {
         let (sender, receiver) = create_buf(10);
@@ -153,7 +141,6 @@ mod tests {
         assert_is_empty(&receiver);
     }
 
-
     #[test]
     fn should_return_all_items_without_request_limit() {
         let (sender, receiver) = create_buf(10);
@@ -169,7 +156,6 @@ mod tests {
 
         assert_is_empty(&receiver);
     }
-
 
     #[test]
     fn should_count_rejections() {
@@ -206,11 +192,9 @@ mod tests {
         assert_contains(receiver, vec![]);
     }
 
-
     fn add_key_value(sender: &Sender<usize, MarketSnapshot>, snapshot: MarketSnapshot) {
         assert!(sender.offer(snapshot.instrument_id, snapshot));
     }
-
 
     fn assert_contains(
         receiver: &Receiver<usize, MarketSnapshot>,
