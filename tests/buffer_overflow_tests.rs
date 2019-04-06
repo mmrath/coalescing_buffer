@@ -1,4 +1,4 @@
-extern crate coalescing_buffer;
+
 
 
 #[cfg(test)]
@@ -13,7 +13,7 @@ mod tests {
     fn should_be_able_to_reuse_capacity() {
         let (sender, receiver) = new_ring_buffer(32);
         let producer = thread::spawn(move || producer_task(sender));
-        let _ = thread::spawn(move || consumer_task(receiver));
+        let con = thread::spawn(move || consumer_task(receiver));
 
         let producer_overflow = producer.join().unwrap();
         assert!(!producer_overflow, "ring simple has overflowed");

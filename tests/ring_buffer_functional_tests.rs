@@ -1,4 +1,4 @@
-extern crate coalescing_buffer;
+
 
 
 #[cfg(test)]
@@ -22,7 +22,7 @@ mod tests {
         ask: 8,
     };
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Copy, Eq)]
     struct MarketSnapshot {
         pub instrument_id: usize,
         pub bid: isize,

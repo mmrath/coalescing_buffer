@@ -3,15 +3,16 @@ use std::{cmp, mem, ptr};
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 use std::marker::PhantomData;
+use crossbeam_utils::atomic::AtomicCell;
 
 
 #[derive(Debug)]
-struct CoalescingRingBuffer<K, V> {
+struct CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {
     next_write: AtomicUsize,
     last_cleaned: AtomicUsize,
     rejection_count: AtomicUsize,
     keys: Vec<KeyCell<KeyHolder<K>>>,
-    values: Vec<AtomicPtr<V>>,
+    values: Vec<AtomicCell<Option<V>>>,
     mask: usize,
     capacity: usize,
     first_write: AtomicUsize,
@@ -62,17 +63,17 @@ fn next_power_of_two(capacity: usize) -> usize {
 impl<K, V> CoalescingRingBuffer<K, V>
 where
     K: Eq + Send,
-    V: Send,
+    V: Send + Eq + Copy,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
 
         let mut keys: Vec<KeyCell<KeyHolder<K>>> = Vec::with_capacity(size);
-        let mut values: Vec<AtomicPtr<V>> = Vec::with_capacity(size);
+        let mut values: Vec<AtomicCell<Option<V>>> = Vec::with_capacity(size);
 
         for _ in 0..size {
             keys.push(KeyCell::new(KeyHolder::Empty));
-            values.push(AtomicPtr::new(ptr::null_mut()));
+            values.push(AtomicCell::new(None));
         }
 
         CoalescingRingBuffer {
@@ -83,8 +84,8 @@ where
             last_read: AtomicUsize::new(0),
             capacity: size,
             mask: size - 1,
-            keys: keys,
-            values: values,
+            keys,
+            values,
         }
     }
 
@@ -128,31 +129,28 @@ where
 
     pub fn offer(&self, key: K, value: V) -> bool {
         let next_write = self.next_write.load(Ordering::SeqCst);
-        let val_ptr = Box::into_raw(Box::new(value));
+        let val_ptr = Some(value);
         let key_type = KeyHolder::NonEmpty(key);
         for update_pos in self.first_write.load(Ordering::SeqCst)..next_write {
             let index = self.mask(update_pos);
             if &key_type == self.keys[index].get() {
-                let old_ptr = self.values[index].swap(val_ptr, Ordering::SeqCst);
+                let old_ptr = self.values[index].swap(val_ptr);
                 if update_pos >= self.first_write.load(Ordering::SeqCst) {
-                    // check that the reader has not read beyond our update point yet
-                    drop_value(old_ptr);
                     return true;
                 } else {
-                    self.values[index].compare_and_swap(val_ptr, old_ptr, Ordering::SeqCst);
-                    //::std::thread::sleep(::std::time::Duration::from_millis(2000));
+                    self.values[index].compare_and_swap(old_ptr, val_ptr);
                     break;
                 }
             }
         }
-        return self.add(key_type, val_ptr);
+        return self.add(key_type, val_ptr.unwrap());
     }
 
     pub fn offer_value_only(&self, value: V) -> bool {
-        return self.add(KeyHolder::NonCollapsible, Box::into_raw(Box::new(value)));
+        return self.add(KeyHolder::NonCollapsible, value);
     }
 
-    fn add(&self, key: KeyHolder<K>, value: *mut V) -> bool {
+    fn add(&self, key: KeyHolder<K>, value: V) -> bool {
         if self.is_full() {
             self.rejection_count.fetch_add(1, Ordering::SeqCst);
             return false;
@@ -173,18 +171,16 @@ where
         for x in last_cln..last_read {
             let index = self.mask(x + 1);
             self.keys[index].set(KeyHolder::Empty);
-            let old_val = self.values[index].swap(ptr::null_mut(), Ordering::SeqCst);
-            drop_value(old_val);
+            let old_val = self.values[index].swap(None);
         }
         self.last_cleaned.store(last_read, Ordering::SeqCst);
     }
 
-    fn store(&self, key: KeyHolder<K>, value: *mut V) {
+    fn store(&self, key: KeyHolder<K>, value: V) {
         let next_write = self.next_write.load(Ordering::SeqCst);
         let index = self.mask(next_write);
         self.keys[index].set(key);
-        let old_ptr = self.values[index].swap(value, Ordering::SeqCst);
-        drop_value(old_ptr);
+        let old_ptr = self.values[index].swap(Some(value));
         self.next_write.store(next_write + 1, Ordering::SeqCst);
     }
 
@@ -208,13 +204,13 @@ where
         let mut bucket: Vec<V> = Vec::new();
         for read_index in last_read + 1..claim_up_to {
             let index = self.mask(read_index);
-            let val = self.values[index].swap(ptr::null_mut(), Ordering::SeqCst);
-            if val.is_null() {
+            let val = self.values[index].swap(None);
+            if val.is_none() {
                 //println!("{:?}", self);
                 //println!("claim_up_to:{:?}", claim_up_to);
                 panic!("Null pointer is not expected here!")
             } else {
-                bucket.push(unsafe { *(Box::from_raw(val)) });
+                bucket.push(val.unwrap());
             }
         }
         self.last_read.store(claim_up_to - 1, Ordering::SeqCst);
@@ -227,28 +223,19 @@ where
 }
 
 
-unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> {}
-unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> {}
-
-fn drop_value<V>(val_ptr: *mut V)
-where
-    V: Send,
-{
-    if !val_ptr.is_null() {
-        let val = unsafe { Box::from_raw(val_ptr) };
-        drop(val);
-    }
-}
+unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {}
+unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {}
 
 
-pub struct Receiver<K, V> {
+
+pub struct Receiver<K, V> where V: Send + Eq + Copy {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
     _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
-unsafe impl<K: Send, V: Send> Send for Receiver<K, V> {}
+unsafe impl<K: Send, V: Send> Send for Receiver<K, V> where V: Send + Eq + Copy {}
 
-impl<K: Send + Eq, V: Send> Receiver<K, V> {
+impl<K: Send + Eq, V: Send+Eq+Copy> Receiver<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
         Receiver {
             buffer: buf,
@@ -270,14 +257,14 @@ impl<K: Send + Eq, V: Send> Receiver<K, V> {
 }
 
 
-pub struct Sender<K, V> {
+pub struct Sender<K, V> where V: Send + Eq + Copy{
     buffer: Arc<CoalescingRingBuffer<K, V>>,
     _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
-unsafe impl<K: Send, V: Send> Send for Sender<K, V> {}
+unsafe impl<K: Send, V: Send> Send for Sender<K, V> where V: Send + Eq + Copy{}
 
-impl<K: Send + Eq, V: Send> Sender<K, V> {
+impl<K: Send + Eq, V: Send> Sender<K, V> where V: Send + Eq + Copy {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
         Sender {
             buffer: buf,
@@ -307,7 +294,7 @@ impl<K: Send + Eq, V: Send> Sender<K, V> {
 ///
 /// `let (sender, receiver) = new_ring_buffer(25);`
 ///
-pub fn new_ring_buffer<K: Send + Eq, V: Send>(capacity: usize) -> (Sender<K, V>, Receiver<K, V>) {
+pub fn new_ring_buffer<K: Send + Eq, V: Send + Eq + Copy >(capacity: usize) -> (Sender<K, V>, Receiver<K, V>) {
     let buf = Arc::new(CoalescingRingBuffer::new(capacity));
     let buf_clone = buf.clone();
     (Sender::new(buf), Receiver::new(buf_clone))
@@ -339,7 +326,7 @@ mod tests {
         ask: 8,
     };
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Copy)]
     struct MarketSnapshot {
         pub instrument_id: usize,
         pub bid: isize,
@@ -349,7 +336,7 @@ mod tests {
     impl MarketSnapshot {
         pub fn new(instrument_id: usize, best_bid: isize, best_ask: isize) -> Self {
             MarketSnapshot {
-                instrument_id: instrument_id,
+                instrument_id,
                 bid: best_bid,
                 ask: best_ask,
             }

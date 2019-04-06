@@ -1,4 +1,4 @@
-extern crate coalescing_buffer;
+
 
 use coalescing_buffer::simple::new_simple_buffer;
 use std::thread;
