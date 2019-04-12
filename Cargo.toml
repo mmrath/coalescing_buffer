@@ -15,3 +15,7 @@ travis-ci = { repository = "mmrath/coalescing_buffer" }
 
 [dependencies]
 crossbeam-utils = "0.6"
+
+[dev-dependencies]
+chrono="0.4"
+lazy_static="1.3"

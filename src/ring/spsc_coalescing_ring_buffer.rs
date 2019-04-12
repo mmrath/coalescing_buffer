@@ -5,10 +5,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{cmp, mem};
 
-#[derive(Debug)]
 struct CoalescingRingBuffer<K, V>
 where
-    V: Send + Eq + Copy,
+    V: Send + Clone,
 {
     next_write: AtomicUsize,
     last_cleaned: AtomicUsize,
@@ -65,7 +64,7 @@ fn next_power_of_two(capacity: usize) -> usize {
 impl<K, V> CoalescingRingBuffer<K, V>
 where
     K: Eq + Send,
-    V: Send + Eq + Copy,
+    V: Send + Clone,
 {
     pub fn new(capacity: usize) -> CoalescingRingBuffer<K, V> {
         let size = next_power_of_two(capacity);
@@ -129,22 +128,23 @@ where
     }
 
     pub fn offer(&self, key: K, value: V) -> bool {
+        use std::borrow::Cow;
+
         let next_write = self.next_write.load(Ordering::SeqCst);
-        let val_ptr = Some(value);
         let key_type = KeyHolder::NonEmpty(key);
         for update_pos in self.first_write.load(Ordering::SeqCst)..next_write {
             let index = self.mask(update_pos);
             if &key_type == self.keys[index].get() {
-                let old_ptr = self.values[index].swap(val_ptr);
+                let old_ptr = self.values[index].swap(Some(value.clone()));
                 if update_pos >= self.first_write.load(Ordering::SeqCst) {
                     return true;
                 } else {
-                    self.values[index].compare_and_swap(old_ptr, val_ptr);
+                    //self.values[index].compare_and_swap(old_ptr, val_ptr);
                     break;
                 }
             }
         }
-        return self.add(key_type, val_ptr.unwrap());
+        return self.add(key_type, value);
     }
 
     pub fn offer_value_only(&self, value: V) -> bool {
@@ -223,20 +223,20 @@ where
     }
 }
 
-unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {}
-unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> where V: Send + Eq + Copy {}
+unsafe impl<K, V> Send for CoalescingRingBuffer<K, V> where V: Send + Clone {}
+unsafe impl<K, V> Sync for CoalescingRingBuffer<K, V> where V: Send + Clone {}
 
 pub struct Receiver<K, V>
 where
-    V: Send + Eq + Copy,
+    V: Send + Clone,
 {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
     _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
-unsafe impl<K: Send, V: Send> Send for Receiver<K, V> where V: Send + Eq + Copy {}
+unsafe impl<K: Send, V: Send + Clone> Send for Receiver<K, V> where V: Send {}
 
-impl<K: Send + Eq, V: Send + Eq + Copy> Receiver<K, V> {
+impl<K: Send + Eq, V: Send + Clone> Receiver<K, V> {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
         Receiver {
             buffer: buf,
@@ -259,17 +259,17 @@ impl<K: Send + Eq, V: Send + Eq + Copy> Receiver<K, V> {
 
 pub struct Sender<K, V>
 where
-    V: Send + Eq + Copy,
+    V: Send + Clone,
 {
     buffer: Arc<CoalescingRingBuffer<K, V>>,
     _phantom_data: PhantomData<*mut ()>, //This to make sure we have only one thread access this
 }
 
-unsafe impl<K: Send, V: Send> Send for Sender<K, V> where V: Send + Eq + Copy {}
+unsafe impl<K: Send, V: Send + Clone> Send for Sender<K, V> where V: Send {}
 
-impl<K: Send + Eq, V: Send> Sender<K, V>
+impl<K: Send + Eq, V: Send + Clone> Sender<K, V>
 where
-    V: Send + Eq + Copy,
+    V: Send + Clone,
 {
     fn new(buf: Arc<CoalescingRingBuffer<K, V>>) -> Self {
         Sender {
@@ -300,7 +300,7 @@ where
 ///
 /// `let (sender, receiver) = new_ring_buffer(25);`
 ///
-pub fn new_ring_buffer<K: Send + Eq, V: Send + Eq + Copy>(
+pub fn new_ring_buffer<K: Send + Eq, V: Send + Clone>(
     capacity: usize,
 ) -> (Sender<K, V>, Receiver<K, V>) {
     let buf = Arc::new(CoalescingRingBuffer::new(capacity));
