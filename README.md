@@ -6,8 +6,6 @@ An attempt to port Java [Coalescing Ring Buffer](https://github.com/LMAX-Exchang
 
 # TO DO
 
-* Add more functional test cases
-* Add performance test cases
 * Add documentation
 * Compare with Java performance
 
